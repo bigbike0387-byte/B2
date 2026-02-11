@@ -1,0 +1,476 @@
+// ============================================
+// app.js - ระบบสั่งอาหารผ่าน QR Code
+// ============================================
+
+// ----- Utility Functions -----
+function showToast(message, type = 'info') {
+    const container = document.querySelector('.toast-container') || createToastContainer();
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.innerHTML = `
+        <span>${type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ'}</span>
+        <span>${message}</span>
+    `;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+
+function createToastContainer() {
+    const container = document.createElement('div');
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+    return container;
+}
+
+function formatCurrency(amount) {
+    return '฿' + amount.toLocaleString('th-TH');
+}
+
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleString('th-TH', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+// ----- LocalStorage Helpers -----
+const Storage = {
+    get(key, defaultValue = []) {
+        try {
+            const data = localStorage.getItem(key);
+            return data ? JSON.parse(data) : defaultValue;
+        } catch (e) {
+            return defaultValue;
+        }
+    },
+    set(key, value) {
+        localStorage.setItem(key, JSON.stringify(value));
+    }
+};
+
+// ----- Auth System -----
+const Auth = {
+    login(username, password) {
+        const users = Storage.get('food_order_users', []);
+        const user = users.find(u => u.username === username && u.password === password);
+        
+        if (user) {
+            Storage.set('food_order_current_user', user);
+            return { success: true, user };
+        }
+        return { success: false, message: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' };
+    },
+
+    register(username, password, name, role = 'customer') {
+        const users = Storage.get('food_order_users', []);
+        
+        if (users.find(u => u.username === username)) {
+            return { success: false, message: 'ชื่อผู้ใช้นี้มีอยู่แล้ว' };
+        }
+
+        const newUser = {
+            id: Date.now().toString(),
+            username,
+            password, // ในระบบจริงควรเข้ารหัส
+            name,
+            role,
+            createdAt: new Date().toISOString()
+        };
+
+        users.push(newUser);
+        Storage.set('food_order_users', users);
+        return { success: true, user: newUser };
+    },
+
+    logout() {
+        localStorage.removeItem('food_order_current_user');
+    },
+
+    getCurrentUser() {
+        return Storage.get('food_order_current_user', null);
+    },
+
+    checkRole(allowedRoles) {
+        const user = this.getCurrentUser();
+        return user && allowedRoles.includes(user.role);
+    },
+
+    redirectByRole() {
+        const user = this.getCurrentUser();
+        if (!user) return;
+
+        switch(user.role) {
+            case 'admin':
+                window.location.href = 'admin.html';
+                break;
+            case 'staff':
+                window.location.href = 'staff.html';
+                break;
+            case 'customer':
+            default:
+                window.location.href = 'customer.html';
+                break;
+        }
+    }
+};
+
+// ----- Menu System -----
+const Menu = {
+    getAll() {
+        return Storage.get('food_order_menus', [
+            // เมนูตัวอย่างเริ่มต้น
+            { id: '1', name: 'ผัดไทย', description: 'เส้นจันท์ผัดกับเต้าหู้และกุ้ง', price: 80, category: 'อาหารจานเดียว', image: '🍜', available: true },
+            { id: '2', name: 'ต้มยำกุ้ง', description: 'ซุปรสจัดใส่กุ้งสด', price: 120, category: 'ซุป', image: '🍲', available: true },
+            { id: '3', name: 'ข้าวผัดกระเทียม', description: 'ข้าวผัดกระเทียมหอมๆ', price: 60, category: 'อาหารจานเดียว', image: '🍚', available: true }
+        ]);
+    },
+
+    getById(id) {
+        return this.getAll().find(m => m.id === id);
+    },
+
+    getByCategory(category) {
+        const menus = this.getAll();
+        if (category === 'all') return menus;
+        return menus.filter(m => m.category === category);
+    },
+
+    getCategories() {
+        const menus = this.getAll();
+        return [...new Set(menus.map(m => m.category))];
+    },
+
+    add(menu) {
+        const menus = this.getAll();
+        menu.id = Date.now().toString();
+        menu.createdAt = new Date().toISOString();
+        menus.push(menu);
+        Storage.set('food_order_menus', menus);
+        return menu;
+    },
+
+    update(id, data) {
+        const menus = this.getAll();
+        const index = menus.findIndex(m => m.id === id);
+        if (index !== -1) {
+            menus[index] = { ...menus[index], ...data };
+            Storage.set('food_order_menus', menus);
+            return menus[index];
+        }
+        return null;
+    },
+
+    delete(id) {
+        const menus = this.getAll().filter(m => m.id !== id);
+        Storage.set('food_order_menus', menus);
+    }
+};
+
+// ----- Cart System -----
+const Cart = {
+    get() {
+        return Storage.get('food_order_cart', { items: [], total: 0 });
+    },
+
+    addItem(menu, quantity) {
+        const cart = this.get();
+        const existing = cart.items.find(item => item.menuId === menu.id);
+        
+        if (existing) {
+            existing.quantity += quantity;
+        } else {
+            cart.items.push({
+                menuId: menu.id,
+                name: menu.name,
+                price: menu.price,
+                image: menu.image,
+                quantity: quantity
+            });
+        }
+        
+        this.save(cart);
+        return cart;
+    },
+
+    removeItem(menuId) {
+        const cart = this.get();
+        cart.items = cart.items.filter(item => item.menuId !== menuId);
+        this.save(cart);
+        return cart;
+    },
+
+    updateQuantity(menuId, quantity) {
+        const cart = this.get();
+        const item = cart.items.find(item => item.menuId === menuId);
+        if (item) {
+            if (quantity <= 0) {
+                this.removeItem(menuId);
+            } else {
+                item.quantity = quantity;
+                this.save(cart);
+            }
+        }
+        return cart;
+    },
+
+    getCount() {
+        return this.get().items.reduce((sum, item) => sum + item.quantity, 0);
+    },
+
+    getTotal() {
+        return this.get().items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    },
+
+    clear() {
+        Storage.set('food_order_cart', { items: [], total: 0 });
+    },
+
+    save(cart) {
+        Storage.set('food_order_cart', cart);
+    }
+};
+
+// ----- Order System -----
+const Order = {
+    getAll() {
+        return Storage.get('food_order_orders', []);
+    },
+
+    getByTable(tableId) {
+        return this.getAll().filter(o => o.tableId === tableId);
+    },
+
+    create(items, tableId, note = '') {
+        const orders = this.getAll();
+        const order = {
+            id: Date.now().toString(),
+            items: items,
+            tableId: tableId,
+            note: note,
+            status: 'pending',
+            paymentStatus: 'unpaid',
+            paymentMethod: null,
+            total: items.reduce((sum, item) => sum + (item.price * item.quantity), 0),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+        
+        orders.push(order);
+        Storage.set('food_order_orders', orders);
+        return order;
+    },
+
+    updateStatus(id, status) {
+        const orders = this.getAll();
+        const order = orders.find(o => o.id === id);
+        if (order) {
+            order.status = status;
+            order.updatedAt = new Date().toISOString();
+            Storage.set('food_order_orders', orders);
+            return order;
+        }
+        return null;
+    },
+
+    updatePayment(id, method) {
+        const orders = this.getAll();
+        const order = orders.find(o => o.id === id);
+        if (order) {
+            order.paymentStatus = 'paid';
+            order.paymentMethod = method;
+            order.updatedAt = new Date().toISOString();
+            Storage.set('food_order_orders', orders);
+            return order;
+        }
+        return null;
+    },
+
+    getStatusText(status) {
+        const map = {
+            'pending': 'รอดำเนินการ',
+            'cooking': 'กำลังทำ',
+            'ready': 'พร้อมเสิร์ฟ',
+            'served': 'เสิร์ฟแล้ว',
+            'cancelled': 'ยกเลิก'
+        };
+        return map[status] || status;
+    },
+
+    getStatusColor(status) {
+        const map = {
+            'pending': 'badge-pending',
+            'cooking': 'badge-cooking',
+            'ready': 'badge-ready',
+            'served': 'badge-served',
+            'cancelled': 'badge-cancelled'
+        };
+        return map[status] || 'badge-pending';
+    },
+
+    getSalesReport(startDate, endDate) {
+        const orders = this.getAll().filter(o => {
+            const orderDate = new Date(o.createdAt);
+            return orderDate >= new Date(startDate) && orderDate <= new Date(endDate) && o.paymentStatus === 'paid';
+        });
+
+        const totalSales = orders.reduce((sum, o) => sum + o.total, 0);
+        const totalOrders = orders.length;
+        const avgOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
+
+        // คำนวณเมนูขายดี
+        const itemCount = {};
+        orders.forEach(o => {
+            o.items.forEach(item => {
+                if (!itemCount[item.name]) {
+                    itemCount[item.name] = { name: item.name, quantity: 0, revenue: 0 };
+                }
+                itemCount[item.name].quantity += item.quantity;
+                itemCount[item.name].revenue += (item.price * item.quantity);
+            });
+        });
+
+        const topItems = Object.values(itemCount).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
+
+        return { totalSales, totalOrders, avgOrderValue, topItems };
+    }
+};
+
+// ----- Chat System -----
+const Chat = {
+    getAll() {
+        return Storage.get('food_order_messages', []);
+    },
+
+    getByTable(tableId) {
+        return this.getAll().filter(m => m.tableId === tableId);
+    },
+
+    send(tableId, orderId, message, sender) {
+        const messages = this.getAll();
+        const msg = {
+            id: Date.now().toString(),
+            tableId: tableId,
+            orderId: orderId,
+            message: message,
+            sender: sender, // 'customer' หรือ 'staff'
+            read: false,
+            timestamp: new Date().toISOString()
+        };
+        messages.push(msg);
+        Storage.set('food_order_messages', messages);
+        return msg;
+    },
+
+    markAsRead(tableId) {
+        const messages = this.getAll();
+        messages.forEach(m => {
+            if (m.tableId === tableId && m.sender === 'customer') {
+                m.read = true;
+            }
+        });
+        Storage.set('food_order_messages', messages);
+    }
+};
+
+// ----- Issue System -----
+const Issue = {
+    getAll() {
+        return Storage.get('food_order_issues', []);
+    },
+
+    create(title, description, tableId) {
+        const issues = this.getAll();
+        const issue = {
+            id: Date.now().toString(),
+            title: title,
+            description: description,
+            tableId: tableId,
+            status: 'open', // open, in-progress, resolved
+            resolution: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+        issues.push(issue);
+        Storage.set('food_order_issues', issues);
+        return issue;
+    },
+
+    updateStatus(id, status, resolution = null) {
+        const issues = this.getAll();
+        const issue = issues.find(i => i.id === id);
+        if (issue) {
+            issue.status = status;
+            if (resolution) issue.resolution = resolution;
+            issue.updatedAt = new Date().toISOString();
+            Storage.set('food_order_issues', issues);
+            return issue;
+        }
+        return null;
+    }
+};
+
+// ----- Notification System -----
+const Notification = {
+    getAll() {
+        return Storage.get('food_order_notifications', []);
+    },
+
+    create(type, message, tableId) {
+        const notifications = this.getAll();
+        const notif = {
+            id: Date.now().toString(),
+            type: type, // 'call', 'order', 'chat'
+            message: message,
+            tableId: tableId,
+            read: false,
+            createdAt: new Date().toISOString()
+        };
+        notifications.push(notif);
+        Storage.set('food_order_notifications', notifications);
+        return notif;
+    },
+
+    markAsRead(id) {
+        const notifications = this.getAll();
+        const notif = notifications.find(n => n.id === id);
+        if (notif) {
+            notif.read = true;
+            Storage.set('food_order_notifications', notifications);
+        }
+    }
+};
+
+// ----- Initialize Default Data -----
+function initializeData() {
+    // สร้างบัญชีทดสอบถ้ายังไม่มี
+    const users = Storage.get('food_order_users', []);
+    if (!users.find(u => u.username === 'admin')) {
+        users.push({
+            id: 'admin-1',
+            username: 'admin',
+            password: 'admin123',
+            name: 'ผู้ดูแลระบบ',
+            role: 'admin',
+            createdAt: new Date().toISOString()
+        });
+    }
+    if (!users.find(u => u.username === 'staff')) {
+        users.push({
+            id: 'staff-1',
+            username: 'staff',
+            password: 'staff123',
+            name: 'พนักงาน',
+            role: 'staff',
+            createdAt: new Date().toISOString()
+        });
+    }
+    Storage.set('food_order_users', users);
+}
+
+// เรียกใช้เมื่อโหลดหน้า
+initializeData();
+
