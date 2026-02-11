@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code สำหรับโต๊ะ - ร้านอาหาร</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        .qr-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 24px;
+            padding: 20px;
+        }
+        .qr-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .qr-code {
+            margin: 16px auto;
+            padding: 16px;
+            background: white;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div class="page-wrapper">
+        <header class="header">
+            <div class="container header-content">
+                <div class="logo">
+                    <div class="logo-icon">🍽️</div>
+                    <span>QR Code สำหรับโต๊ะ</span>
+                </div>
+                <button class="btn btn-ghost" onclick="window.location.href='admin.html'">กลับหน้าแอดมิน</button>
+            </div>
+        </header>
+
+        <main class="container" style="padding: 32px 16px;">
+            <div class="alert alert-info" style="margin-bottom: 24px;">
+                <span>💡</span>
+                <span>สแกน QR Code เพื่อสั่งอาหาร หรือคลิกที่ลิงก์เพื่อเปิดหน้าสั่งอาหาร</span>
+            </div>
+
+            <div class="qr-container" id="qrContainer">
+                <!-- QR codes will be generated here -->
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const baseUrl = window.location.origin + window.location.pathname.replace('qr-generator.html', 'customer.html');
+
+        function generateQR() {
+            const container = document.getElementById('qrContainer');
+
+            for (let i = 1; i <= 8; i++) {
+                const url = `${baseUrl}?table=${i}`;
+
+                const card = document.createElement('div');
+                card.className = 'qr-card';
+                card.innerHTML = `
+                    <h3 style="color: var(--color-primary); margin-bottom: 8px;">โต๊ะ ${i}</h3>
+                    <div class="qr-code" id="qr-${i}"></div>
+                    <p style="font-size: 0.875rem; color: var(--text-gray); word-break: break-all;">
+                        <a href="${url}" style="color: var(--color-primary);">${url}</a>
+                    </p>
+                    <button class="btn btn-outline btn-sm" onclick="window.open('${url}', '_blank')" style="margin-top: 12px;">
+                        เปิดหน้าสั่งอาหาร
+                    </button>
+                `;
+                container.appendChild(card);
+
+                new QRCode(document.getElementById(`qr-${i}`), {
+                    text: url,
+                    width: 150,
+                    height: 150,
+                    colorDark: "#2E7D32",
+                    colorLight: "#ffffff",
+                    correctLevel: QRCode.CorrectLevel.M
+                });
+            }
+        }
+
+        generateQR();
+    </script>
+</body>
+</html>

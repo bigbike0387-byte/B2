@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>สั่งอาหาร - ร้านอาหาร</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="page-wrapper">
+        <!-- Header -->
+        <header class="header">
+            <div class="container header-content">
+                <div class="logo">
+                    <div class="logo-icon">🍽️</div>
+                    <span>ร้านอาหารอร่อย</span>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-ghost btn-icon" onclick="openChat()" title="แชทกับครัว">💬</button>
+                    <button class="btn btn-ghost btn-icon" onclick="callStaff()" title="เรียกพนักงาน">🛎️</button>
+                    <button class="btn btn-ghost" onclick="viewOrders()">ดูออเดอร์</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="container" style="padding: 20px 16px;">
+            <!-- Table Info -->
+            <div class="table-info">
+                <div>
+                    <div style="font-size: 0.875rem; opacity: 0.9;">โต๊ะของคุณ</div>
+                    <div class="table-number" id="tableNumber">-</div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 0.875rem; opacity: 0.9;">สถานะ</div>
+                    <div style="font-weight: 600;">🟢 เปิดให้สั่ง</div>
+                </div>
+            </div>
+
+            <!-- Categories -->
+            <div class="menu-categories" id="categoryList">
+                <button class="category-btn active" data-category="all">ทั้งหมด</button>
+            </div>
+
+            <!-- Menu Grid -->
+            <div class="menu-grid" id="menuGrid">
+                <!-- Menu items will be loaded here -->
+            </div>
+
+            <!-- My Orders Section -->
+            <div id="ordersSection" style="display: none; margin-top: 32px;">
+                <h2 style="margin-bottom: 16px;">ออเดอร์ของฉัน</h2>
+                <div id="ordersList"></div>
+            </div>
+        </main>
+
+        <!-- Cart FAB -->
+        <button class="cart-fab" onclick="openCart()">
+            🛒
+            <span class="cart-badge" id="cartBadge">0</span>
+        </button>
+    </div>
+
+    <!-- Cart Modal -->
+    <div class="modal-overlay" id="cartModal">
+        <div class="modal" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3>ตะกร้าสินค้า</h3>
+                <button class="modal-close" onclick="closeCart()">&times;</button>
+            </div>
+            <div class="modal-body" id="cartItems">
+                <!-- Cart items will be loaded here -->
+            </div>
+            <div class="modal-footer" style="flex-direction: column;">
+                <div class="cart-summary" style="width: 100%; margin-bottom: 16px;">
+                    <div class="summary-row">
+                        <span>ยอดรวม</span>
+                        <span id="cartTotal">฿0</span>
+                    </div>
+                </div>
+                <div class="form-group" style="width: 100%;">
+                    <label class="form-label">หมายเหตุถึงครัว</label>
+                    <textarea class="form-textarea" id="orderNote" rows="2" placeholder="เช่น ไม่ใส่ผัก ไม่เผ็ด..."></textarea>
+                </div>
+                <button class="btn btn-primary btn-block btn-lg" onclick="checkout()" id="checkoutBtn">
+                    สั่งอาหาร
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chat Modal -->
+    <div class="modal-overlay" id="chatModal">
+        <div class="modal" style="max-width: 450px;">
+            <div class="modal-header">
+                <h3>💬 แชทกับครัว</h3>
+                <button class="modal-close" onclick="closeChat()">&times;</button>
+            </div>
+            <div class="chat-container" style="height: 400px;">
+                <div class="chat-messages" id="chatMessages"></div>
+                <div class="chat-input-area">
+                    <input type="text" class="form-input" id="chatInput" placeholder="พิมพ์ข้อความ..." style="flex: 1;">
+                    <button class="btn btn-primary" onclick="sendMessage()">ส่ง</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        // ดึงเลขโต๊ะจาก URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const tableId = urlParams.get('table') || '1';
+        document.getElementById('tableNumber').textContent = tableId;
+
+        // โหลดหมวดหมู่
+        function loadCategories() {
+            const categories = Menu.getCategories();
+            const container = document.getElementById('categoryList');
+
+            categories.forEach(cat => {
+                const btn = document.createElement('button');
+                btn.className = 'category-btn';
+                btn.textContent = cat;
+                btn.dataset.category = cat;
+                btn.onclick = () => filterCategory(cat, btn);
+                container.appendChild(btn);
+            });
+        }
+
+        // กรองตามหมวดหมู่
+        function filterCategory(category, btn) {
+            document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            loadMenu(category);
+        }
+
+        // โหลดเมนู
+        function loadMenu(category = 'all') {
+            const menus = Menu.getByCategory(category);
+            const container = document.getElementById('menuGrid');
+            container.innerHTML = '';
+
+            if (menus.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state" style="grid-column: 1/-1;">
+                        <div class="empty-state-icon">📭</div>
+                        <p>ไม่มีรายการอาหารในหมวดหมู่นี้</p>
+                    </div>
+                `;
+                return;
+            }
+
+            menus.forEach(menu => {
+                const item = document.createElement('div');
+                item.className = 'menu-item';
+                item.innerHTML = `
+                    <div class="menu-item-image">${menu.image || '🍽️'}</div>
+                    <div class="menu-item-content">
+                        <div class="menu-item-title">${menu.name}</div>
+                        <div class="menu-item-desc">${menu.description}</div>
+                        <div class="menu-item-footer">
+                            <div class="menu-item-price">${formatCurrency(menu.price)}</div>
+                            <div class="quantity-control">
+                                <button class="quantity-btn" onclick="updateCart('${menu.id}', -1)">-</button>
+                                <span class="quantity-value" id="qty-${menu.id}">0</span>
+                                <button class="quantity-btn" onclick="updateCart('${menu.id}', 1)">+</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+
+            updateCartDisplay();
+        }
+
+        // อัพเดทตะกร้า
+        function updateCart(menuId, change) {
+            const menu = Menu.getById(menuId);
+            if (!menu) return;
+
+            const cart = Cart.get();
+            const existingItem = cart.items.find(item => item.menuId === menuId);
+            const currentQty = existingItem ? existingItem.quantity : 0;
+            const newQty = currentQty + change;
+
+            if (newQty <= 0) {
+                Cart.removeItem(menuId);
+            } else {
+                Cart.addItem(menu, change);
+            }
+
+            updateCartDisplay();
+            showToast(change > 0 ? 'เพิ่มลงตะกร้าแล้ว' : 'ลบออกจากตะกร้าแล้ว', 'success');
+        }
+
+        // อัพเดทการแสดงผลตะกร้า
+        function updateCartDisplay() {
+            const cart = Cart.get();
+            const count = Cart.getCount();
+
+            document.getElementById('cartBadge').textContent = count;
+            document.getElementById('cartBadge').style.display = count > 0 ? 'flex' : 'none';
+
+            // อัพเดทตัวเลขในหน้าเมนู
+            cart.items.forEach(item => {
+                const qtyEl = document.getElementById(`qty-${item.menuId}`);
+                if (qtyEl) qtyEl.textContent = item.quantity;
+            });
+
+            // รีเซ็ตตัวเลขที่ไม่มีในตะกร้า
+            document.querySelectorAll('.quantity-value').forEach(el => {
+                const menuId = el.id.replace('qty-', '');
+                if (!cart.items.find(item => item.menuId === menuId)) {
+                    el.textContent = '0';
+                }
+            });
+        }
+
+        // เปิด/ปิดตะกร้า
+        function openCart() {
+            const cart = Cart.get();
+            const container = document.getElementById('cartItems');
+
+            if (cart.items.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🛒</div>
+                        <p>ตะกร้าว่างเปล่า</p>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = cart.items.map(item => `
+                    <div class="cart-item">
+                        <div class="cart-item-image">${item.image || '🍽️'}</div>
+                        <div class="cart-item-details">
+                            <div class="cart-item-title">${item.name}</div>
+                            <div class="cart-item-price">${formatCurrency(item.price)} x ${item.quantity}</div>
+                            <div class="cart-item-actions">
+                                <button class="quantity-btn" onclick="updateCartItem('${item.menuId}', -1)">-</button>
+                                <span class="quantity-value">${item.quantity}</span>
+                                <button class="quantity-btn" onclick="updateCartItem('${item.menuId}', 1)">+</button>
+                                <button class="btn btn-ghost btn-sm" onclick="updateCartItem('${item.menuId}', -999)" style="margin-left: 8px;">ลบ</button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            document.getElementById('cartTotal').textContent = formatCurrency(Cart.getTotal());
+            document.getElementById('cartModal').classList.add('active');
+        }
+
+        function closeCart() {
+            document.getElementById('cartModal').classList.remove('active');
+        }
+
+        // อัพเดทจำนวนในตะกร้า (จาก modal)
+        function updateCartItem(menuId, change) {
+            if (change === -999) {
+                Cart.removeItem(menuId);
+            } else {
+                const cart = Cart.get();
+                const item = cart.items.find(i => i.menuId === menuId);
+                if (item) {
+                    const menu = { id: item.menuId, name: item.name, price: item.price, image: item.image };
+                    if (change > 0) {
+                        Cart.addItem(menu, 1);
+                    } else {
+                        Cart.updateQuantity(menuId, item.quantity - 1);
+                    }
+                }
+            }
+            openCart(); // Refresh
+            updateCartDisplay();
+        }
+
+        // สั่งอาหาร
+        function checkout() {
+            const cart = Cart.get();
+            if (cart.items.length === 0) {
+                showToast('กรุณาเพิ่มรายการอาหาร', 'warning');
+                return;
+            }
+
+            const note = document.getElementById('orderNote').value;
+            const order = Order.create(cart.items, tableId, note);
+
+            Cart.clear();
+            updateCartDisplay();
+            closeCart();
+
+            showToast('สั่งอาหารสำเร็จ! ออเดอร์ #' + order.id.slice(-6), 'success');
+
+            // ส่งข้อความแจ้งครัว
+            if (note) {
+                Chat.send(tableId, order.id, `หมายเหตุ: ${note}`, 'customer');
+            }
+
+            setTimeout(() => viewOrders(), 500);
+        }
+
+        // ดูออเดอร์
+        function viewOrders() {
+            const orders = Order.getByTable(tableId);
+            const section = document.getElementById('ordersSection');
+            const list = document.getElementById('ordersList');
+
+            section.style.display = 'block';
+
+            if (orders.length === 0) {
+                list.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📋</div>
+                        <p>ยังไม่มีออเดอร์</p>
+                    </div>
+                `;
+            } else {
+                list.innerHTML = orders.map(order => `
+                    <div class="card" style="margin-bottom: 16px;">
+                        <div class="card-header">
+                            <div>
+                                <div style="font-weight: 600;">ออเดอร์ #${order.id.slice(-6)}</div>
+                                <div style="font-size: 0.875rem; color: var(--text-gray);">${formatDate(order.createdAt)}</div>
+                            </div>
+                            <span class="badge ${Order.getStatusColor(order.status)}">${Order.getStatusText(order.status)}</span>
+                        </div>
+                        <div class="card-body">
+                            ${order.items.map(item => `
+                                <div class="order-item">
+                                    <span>${item.name} x ${item.quantity}</span>
+                                    <span>${formatCurrency(item.price * item.quantity)}</span>
+                                </div>
+                            `).join('')}
+                            ${order.note ? `<div style="margin-top: 8px; padding: 8px; background: var(--bg-light); border-radius: var(--radius-sm); font-size: 0.875rem;">📝 ${order.note}</div>` : ''}
+                        </div>
+                        <div class="card-footer" style="justify-content: space-between;">
+                            <div style="font-weight: 600;">รวม: ${formatCurrency(order.total)}</div>
+                            <div>
+                                ${order.paymentStatus === 'paid' 
+                                    ? '<span class="badge badge-paid">✓ ชำระแล้ว</span>' 
+                                    : '<span class="badge badge-pending">⏳ ยังไม่ชำระ</span>'
+                                }
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            section.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // เรียกพนักงาน
+        function callStaff() {
+            Notification.create('call', `โต๊ะ ${tableId} เรียกพนักงาน`, tableId);
+            showToast('เรียกพนักงานแล้ว กรุณารอสักครู่', 'success');
+        }
+
+        // แชท
+        function openChat() {
+            document.getElementById('chatModal').classList.add('active');
+            loadChatMessages();
+        }
+
+        function closeChat() {
+            document.getElementById('chatModal').classList.remove('active');
+        }
+
+        function loadChatMessages() {
+            const messages = Chat.getByTable(tableId);
+            const container = document.getElementById('chatMessages');
+
+            if (messages.length === 0) {
+                container.innerHTML = '<div style="text-align: center; color: var(--text-gray); padding: 20px;">เริ่มต้นการสนทนา...</div>';
+            } else {
+                container.innerHTML = messages.map(msg => `
+                    <div class="chat-message ${msg.sender === 'customer' ? 'sent' : 'received'}">
+                        <div>${msg.message}</div>
+                        <div class="chat-message-time">${formatDate(msg.timestamp)}</div>
+                    </div>
+                `).join('');
+            }
+
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+
+            if (!message) return;
+
+            Chat.send(tableId, null, message, 'customer');
+            input.value = '';
+            loadChatMessages();
+        }
+
+        // Enter to send
+        document.getElementById('chatInput')?.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        // โหลดข้อมูลเริ่มต้น
+        loadCategories();
+        loadMenu();
+        updateCartDisplay();
+    </script>
+</body>
+</html>

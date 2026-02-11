@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>แอดมิน - ร้านอาหาร</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <aside class="admin-sidebar">
+        <div class="admin-sidebar-header">
+            <div class="logo">
+                <div class="logo-icon">⚙️</div>
+                <span>แอดมิน</span>
+            </div>
+        </div>
+        <nav class="admin-nav">
+            <div class="admin-nav-item active" onclick="showSection('dashboard')">
+                <span>📊</span> แดชบอร์ด
+            </div>
+            <div class="admin-nav-item" onclick="showSection('menu')">
+                <span>🍽️</span> จัดการเมนู
+            </div>
+            <div class="admin-nav-item" onclick="showSection('orders')">
+                <span>📋</span> รายการออเดอร์
+            </div>
+            <div class="admin-nav-item" onclick="showSection('reports')">
+                <span>📈</span> รายงานยอดขาย
+            </div>
+            <div class="admin-nav-item" onclick="showSection('issues')">
+                <span>⚠️</span> แจ้งปัญหา
+            </div>
+            <div class="admin-nav-item" onclick="Auth.logout(); window.location.href='login.html';">
+                <span>🚪</span> ออกจากระบบ
+            </div>
+        </nav>
+    </aside>
+
+    <main class="admin-main">
+        <header class="admin-header">
+            <h2 id="pageTitle">แดชบอร์ด</h2>
+            <div style="display: flex; align-items: center; gap: 16px;">
+                <span id="adminName">แอดมิน</span>
+                <div style="width: 40px; height: 40px; background: var(--color-primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white;">👤</div>
+            </div>
+        </header>
+
+        <div class="admin-content">
+            <section id="dashboardSection">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon green">💰</div>
+                        <div class="stat-value" id="todaySales">฿0</div>
+                        <div class="stat-label">ยอดขายวันนี้</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon orange">📋</div>
+                        <div class="stat-value" id="todayOrders">0</div>
+                        <div class="stat-label">ออเดอร์วันนี้</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon blue">🍽️</div>
+                        <div class="stat-value" id="totalMenus">0</div>
+                        <div class="stat-label">จำนวนเมนู</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon red">⏳</div>
+                        <div class="stat-value" id="pendingOrders">0</div>
+                        <div class="stat-label">รอดำเนินการ</div>
+                    </div>
+                </div>
+
+                <div class="grid grid-2" style="margin-top: 32px;">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">ออเดอร์ล่าสุด</span>
+                        </div>
+                        <div class="card-body">
+                            <div id="recentOrders"></div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">เมนูขายดี</span>
+                        </div>
+                        <div class="card-body">
+                            <div id="topMenus"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="menuSection" style="display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3>รายการเมนู</h3>
+                    <button class="btn btn-primary" onclick="openMenuModal()">+ เพิ่มเมนู</button>
+                </div>
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>รูป</th>
+                                <th>ชื่อเมนู</th>
+                                <th>หมวดหมู่</th>
+                                <th>ราคา</th>
+                                <th>สถานะ</th>
+                                <th>จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="menuTable"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section id="ordersSection" style="display: none;">
+                <h3 style="margin-bottom: 20px;">รายการออเดอร์ทั้งหมด</h3>
+                <div id="allOrders"></div>
+            </section>
+
+            <section id="reportsSection" style="display: none;">
+                <div class="card" style="margin-bottom: 20px;">
+                    <div class="card-header">
+                        <span class="card-title">เลือกช่วงเวลา</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="grid grid-2">
+                            <div class="form-group">
+                                <label class="form-label">วันที่เริ่มต้น</label>
+                                <input type="date" class="form-input" id="startDate">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">วันที่สิ้นสุด</label>
+                                <input type="date" class="form-input" id="endDate">
+                            </div>
+                        </div>
+                        <button class="btn btn-primary" onclick="generateReport()" style="margin-top: 12px;">ดูรายงาน</button>
+                    </div>
+                </div>
+                <div id="reportResults"></div>
+            </section>
+
+            <section id="issuesSection" style="display: none;">
+                <h3 style="margin-bottom: 20px;">รายการแจ้งปัญหา</h3>
+                <div id="issuesList"></div>
+            </section>
+        </div>
+    </main>
+
+    <div class="modal-overlay" id="menuModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="menuModalTitle">เพิ่มเมนูใหม่</h3>
+                <button class="modal-close" onclick="closeMenuModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="menuForm">
+                    <input type="hidden" id="menuId">
+                    <div class="form-group">
+                        <label class="form-label">ชื่อเมนู *</label>
+                        <input type="text" class="form-input" id="menuName" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">รายละเอียด</label>
+                        <textarea class="form-textarea" id="menuDesc" rows="2"></textarea>
+                    </div>
+                    <div class="grid grid-2">
+                        <div class="form-group">
+                            <label class="form-label">ราคา *</label>
+                            <input type="number" class="form-input" id="menuPrice" required min="0">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">หมวดหมู่ *</label>
+                            <input type="text" class="form-input" id="menuCategory" list="categoryList" required>
+                            <datalist id="categoryList"></datalist>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">อิโมจิ (แสดงแทนรูป)</label>
+                        <input type="text" class="form-input" id="menuImage" placeholder="🍽️" maxlength="2">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">
+                            <input type="checkbox" id="menuAvailable" checked> เปิดขาย
+                        </label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeMenuModal()">ยกเลิก</button>
+                <button class="btn btn-primary" onclick="saveMenu()">บันทึก</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        if (!Auth.checkRole(['admin'])) {
+            window.location.href = 'login.html';
+        }
+
+        const user = Auth.getCurrentUser();
+        if (user) {
+            document.getElementById('adminName').textContent = user.name;
+        }
+
+        function showSection(section) {
+            document.querySelectorAll('section').forEach(s => s.style.display = 'none');
+            document.querySelectorAll('.admin-nav-item').forEach(n => n.classList.remove('active'));
+            document.getElementById(section + 'Section').style.display = 'block';
+            event.target.classList.add('active');
+
+            const titles = {
+                'dashboard': 'แดชบอร์ด',
+                'menu': 'จัดการเมนู',
+                'orders': 'รายการออเดอร์',
+                'reports': 'รายงานยอดขาย',
+                'issues': 'แจ้งปัญหา'
+            };
+            document.getElementById('pageTitle').textContent = titles[section];
+
+            if (section === 'dashboard') loadDashboard();
+            if (section === 'menu') loadMenuTable();
+            if (section === 'orders') loadAllOrders();
+            if (section === 'issues') loadIssues();
+        }
+
+        function loadDashboard() {
+            const today = new Date().toISOString().split('T')[0];
+            const report = Order.getSalesReport(today + 'T00:00:00', today + 'T23:59:59');
+
+            document.getElementById('todaySales').textContent = formatCurrency(report.totalSales);
+            document.getElementById('todayOrders').textContent = report.totalOrders;
+            document.getElementById('totalMenus').textContent = Menu.getAll().length;
+
+            const pending = Order.getAll().filter(o => o.status === 'pending').length;
+            document.getElementById('pendingOrders').textContent = pending;
+
+            const recentOrders = Order.getAll().slice(0, 5);
+            document.getElementById('recentOrders').innerHTML = recentOrders.map(o => `
+                <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--bg-gray);">
+                    <div>
+                        <div style="font-weight: 500;">โต๊ะ ${o.tableId} - #${o.id.slice(-6)}</div>
+                        <div style="font-size: 0.875rem; color: var(--text-gray);">${formatDate(o.createdAt)}</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-weight: 600;">${formatCurrency(o.total)}</div>
+                        <span class="badge ${Order.getStatusColor(o.status)}">${Order.getStatusText(o.status)}</span>
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('topMenus').innerHTML = report.topItems.length === 0 
+                ? '<div style="text-align: center; color: var(--text-gray); padding: 20px;">ไม่มีข้อมูล</div>'
+                : report.topItems.map((item, i) => `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--bg-gray);">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 32px; height: 32px; background: ${i < 3 ? 'var(--color-primary)' : 'var(--bg-gray)'}; color: ${i < 3 ? 'white' : 'var(--text-dark)'}; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600;">${i + 1}</div>
+                            <span>${item.name}</span>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-weight: 600;">${formatCurrency(item.revenue)}</div>
+                            <div style="font-size: 0.875rem; color: var(--text-gray);">${item.quantity} จาน</div>
+                        </div>
+                    </div>
+                `).join('');
+        }
+
+        function loadMenuTable() {
+            const menus = Menu.getAll();
+            const tbody = document.getElementById('menuTable');
+
+            tbody.innerHTML = menus.map(menu => `
+                <tr>
+                    <td style="font-size: 1.5rem;">${menu.image || '🍽️'}</td>
+                    <td>
+                        <div style="font-weight: 500;">${menu.name}</div>
+                        <div style="font-size: 0.875rem; color: var(--text-gray);">${menu.description || '-'}</div>
+                    </td>
+                    <td>${menu.category}</td>
+                    <td>${formatCurrency(menu.price)}</td>
+                    <td>
+                        <span class="badge ${menu.available ? 'badge-ready' : 'badge-cancelled'}">
+                            ${menu.available ? 'เปิดขาย' : 'ปิดชั่วคราว'}
+                        </span>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-ghost" onclick="editMenu('${menu.id}')">แก้ไข</button>
+                        <button class="btn btn-sm btn-ghost" style="color: #F44336;" onclick="deleteMenu('${menu.id}')">ลบ</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            const categories = Menu.getCategories();
+            document.getElementById('categoryList').innerHTML = categories.map(c => `<option value="${c}">`).join('');
+        }
+
+        function openMenuModal() {
+            document.getElementById('menuForm').reset();
+            document.getElementById('menuId').value = '';
+            document.getElementById('menuModalTitle').textContent = 'เพิ่มเมนูใหม่';
+            document.getElementById('menuModal').classList.add('active');
+        }
+
+        function closeMenuModal() {
+            document.getElementById('menuModal').classList.remove('active');
+        }
+
+        function editMenu(id) {
+            const menu = Menu.getById(id);
+            if (!menu) return;
+
+            document.getElementById('menuId').value = menu.id;
+            document.getElementById('menuName').value = menu.name;
+            document.getElementById('menuDesc').value = menu.description || '';
+            document.getElementById('menuPrice').value = menu.price;
+            document.getElementById('menuCategory').value = menu.category;
+            document.getElementById('menuImage').value = menu.image || '';
+            document.getElementById('menuAvailable').checked = menu.available;
+
+            document.getElementById('menuModalTitle').textContent = 'แก้ไขเมนู';
+            document.getElementById('menuModal').classList.add('active');
+        }
+
+        function saveMenu() {
+            const id = document.getElementById('menuId').value;
+            const menuData = {
+                name: document.getElementById('menuName').value,
+                description: document.getElementById('menuDesc').value,
+                price: parseFloat(document.getElementById('menuPrice').value),
+                category: document.getElementById('menuCategory').value,
+                image: document.getElementById('menuImage').value || '🍽️',
+                available: document.getElementById('menuAvailable').checked
+            };
+
+            if (id) {
+                Menu.update(id, menuData);
+                showToast('แก้ไขเมนูสำเร็จ', 'success');
+            } else {
+                Menu.add(menuData);
+                showToast('เพิ่มเมนูสำเร็จ', 'success');
+            }
+
+            closeMenuModal();
+            loadMenuTable();
+        }
+
+        function deleteMenu(id) {
+            if (!confirm('ยืนยันการลบเมนูนี้?')) return;
+            Menu.delete(id);
+            loadMenuTable();
+            showToast('ลบเมนูสำเร็จ', 'success');
+        }
+
+        function loadAllOrders() {
+            const orders = Order.getAll().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            const container = document.getElementById('allOrders');
+
+            if (orders.length === 0) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><p>ไม่มีออเดอร์</p></div>';
+                return;
+            }
+
+            container.innerHTML = orders.map(o => `
+                <div class="card" style="margin-bottom: 16px;">
+                    <div class="card-header" style="justify-content: space-between;">
+                        <div>
+                            <div style="font-weight: 600;">ออเดอร์ #${o.id.slice(-6)} - โต๊ะ ${o.tableId}</div>
+                            <div style="font-size: 0.875rem; color: var(--text-gray);">${formatDate(o.createdAt)}</div>
+                        </div>
+                        <span class="badge ${Order.getStatusColor(o.status)}">${Order.getStatusText(o.status)}</span>
+                    </div>
+                    <div class="card-body">
+                        ${o.items.map(item => `
+                            <div class="order-item">
+                                <span>${item.name} x ${item.quantity}</span>
+                                <span>${formatCurrency(item.price * item.quantity)}</span>
+                            </div>
+                        `).join('')}
+                        <div class="divider"></div>
+                        <div style="display: flex; justify-content: space-between; font-weight: 600;">
+                            <span>รวม</span>
+                            <span>${formatCurrency(o.total)}</span>
+                        </div>
+                    </div>
+                    <div class="card-footer" style="justify-content: space-between;">
+                        <div>
+                            ${o.paymentStatus === 'paid' 
+                                ? '<span class="badge badge-paid">✓ ชำระแล้ว (' + (o.paymentMethod === 'cash' ? 'เงินสด' : 'โอน') + ')</span>' 
+                                : '<span class="badge badge-pending">⏳ ยังไม่ชำระ</span>'
+                            }
+                        </div>
+                        ${o.paymentStatus === 'unpaid' ? `
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-sm btn-secondary" onclick="markPaid('${o.id}', 'cash')">รับเงินสด</button>
+                                <button class="btn btn-sm btn-primary" onclick="markPaid('${o.id}', 'transfer')">โอนแล้ว</button>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function markPaid(orderId, method) {
+            Order.updatePayment(orderId, method);
+            loadAllOrders();
+            showToast('บันทึกการชำระเงินสำเร็จ', 'success');
+        }
+
+        function generateReport() {
+            const start = document.getElementById('startDate').value;
+            const end = document.getElementById('endDate').value;
+
+            if (!start || !end) {
+                showToast('กรุณาเลือกช่วงวันที่', 'warning');
+                return;
+            }
+
+            const report = Order.getSalesReport(start + 'T00:00:00', end + 'T23:59:59');
+
+            document.getElementById('reportResults').innerHTML = `
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon green">💰</div>
+                        <div class="stat-value">${formatCurrency(report.totalSales)}</div>
+                        <div class="stat-label">ยอดขายรวม</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon orange">📋</div>
+                        <div class="stat-value">${report.totalOrders}</div>
+                        <div class="stat-label">จำนวนออเดอร์</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon blue">📊</div>
+                        <div class="stat-value">${formatCurrency(report.avgOrderValue)}</div>
+                        <div class="stat-label">เฉลี่ยต่อออเดอร์</div>
+                    </div>
+                </div>
+                <div class="card" style="margin-top: 20px;">
+                    <div class="card-header">
+                        <span class="card-title">รายการขายดี</span>
+                    </div>
+                    <div class="card-body">
+                        ${report.topItems.length === 0 
+                            ? '<div style="text-align: center; color: var(--text-gray);">ไม่มีข้อมูล</div>'
+                            : report.topItems.map((item, i) => `
+                                <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--bg-gray);">
+                                    <span>${i + 1}. ${item.name}</span>
+                                    <div style="text-align: right;">
+                                        <div>${formatCurrency(item.revenue)}</div>
+                                        <div style="font-size: 0.875rem; color: var(--text-gray);">${item.quantity} จาน</div>
+                                    </div>
+                                </div>
+                            `).join('')
+                        }
+                    </div>
+                </div>
+            `;
+        }
+
+        function loadIssues() {
+            const issues = Issue.getAll().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            const container = document.getElementById('issuesList');
+
+            if (issues.length === 0) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">✅</div><p>ไม่มีปัญหาที่แจ้ง</p></div>';
+                return;
+            }
+
+            container.innerHTML = issues.map(issue => `
+                <div class="card" style="margin-bottom: 16px; border-left: 4px solid ${issue.status === 'open' ? 'var(--color-accent-dark)' : issue.status === 'in-progress' ? 'var(--status-cooking)' : 'var(--color-primary)'};">
+                    <div class="card-header">
+                        <div>
+                            <div style="font-weight: 600;">${issue.title}</div>
+                            <div style="font-size: 0.875rem; color: var(--text-gray);">โต๊ะ ${issue.tableId || '-'} | ${formatDate(issue.createdAt)}</div>
+                        </div>
+                        <span class="badge ${issue.status === 'open' ? 'badge-pending' : issue.status === 'in-progress' ? 'badge-cooking' : 'badge-ready'}">
+                            ${issue.status === 'open' ? 'รอดำเนินการ' : issue.status === 'in-progress' ? 'กำลังแก้ไข' : 'แก้ไขแล้ว'}
+                        </span>
+                    </div>
+                    <div class="card-body">
+                        <p>${issue.description}</p>
+                        ${issue.resolution ? `<div style="margin-top: 12px; padding: 12px; background: var(--bg-light); border-radius: var(--radius-sm);"><strong>การแก้ไข:</strong> ${issue.resolution}</div>` : ''}
+                    </div>
+                    ${issue.status !== 'resolved' ? `
+                        <div class="card-footer">
+                            ${issue.status === 'open' ? `<button class="btn btn-secondary btn-sm" onclick="updateIssue('${issue.id}', 'in-progress')">เริ่มแก้ไข</button>` : ''}
+                            <button class="btn btn-primary btn-sm" onclick="resolveIssue('${issue.id}')">แก้ไขเสร็จสิ้น</button>
+                        </div>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+
+        function updateIssue(id, status) {
+            Issue.updateStatus(id, status);
+            loadIssues();
+            showToast('อัพเดทสถานะแล้ว', 'success');
+        }
+
+        function resolveIssue(id) {
+            const resolution = prompt('บันทึกการแก้ไข:');
+            if (resolution) {
+                Issue.updateStatus(id, 'resolved', resolution);
+                loadIssues();
+                showToast('แก้ไขปัญหาแล้ว', 'success');
+            }
+        }
+
+        loadDashboard();
+    </script>
+</body>
+</html>

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>หน้าครัว - ร้านอาหาร</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="page-wrapper">
+        <div class="staff-header">
+            <div class="container">
+                <div class="header-content">
+                    <div class="logo" style="color: white;">
+                        <div class="logo-icon" style="background: rgba(255,255,255,0.2);">👨‍🍳</div>
+                        <span>หน้าครัว</span>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn" style="background: rgba(255,255,255,0.2); color: white;" onclick="openChat()">
+                            💬 แชท (<span id="unreadCount">0</span>)
+                        </button>
+                        <button class="btn" style="background: rgba(255,255,255,0.2); color: white;" onclick="Auth.logout(); window.location.href='login.html';">
+                            ออกจากระบบ
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <main class="container" style="padding: 20px 16px;">
+            <div style="display: flex; gap: 8px; margin-bottom: 20px; overflow-x: auto;">
+                <button class="category-btn active" onclick="filterOrders('all', this)">ทั้งหมด</button>
+                <button class="category-btn" onclick="filterOrders('pending', this)">รอดำเนินการ</button>
+                <button class="category-btn" onclick="filterOrders('cooking', this)">กำลังทำ</button>
+                <button class="category-btn" onclick="filterOrders('ready', this)">พร้อมเสิร์ฟ</button>
+            </div>
+
+            <div id="ordersContainer"></div>
+        </main>
+    </div>
+
+    <div class="modal-overlay" id="chatModal">
+        <div class="modal" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3>💬 ข้อความจากลูกค้า</h3>
+                <button class="modal-close" onclick="closeChat()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="chatList"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        if (!Auth.checkRole(['staff', 'admin'])) {
+            window.location.href = 'login.html';
+        }
+
+        let currentFilter = 'all';
+        let lastOrderCount = 0;
+
+        function loadOrders() {
+            const orders = Order.getAll().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            const container = document.getElementById('ordersContainer');
+
+            if (orders.length > lastOrderCount && lastOrderCount > 0) {
+                showToast('มีออเดอร์ใหม่!', 'success');
+            }
+            lastOrderCount = orders.length;
+
+            let filteredOrders = orders;
+            if (currentFilter !== 'all') {
+                filteredOrders = orders.filter(o => o.status === currentFilter);
+            }
+
+            if (filteredOrders.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📭</div>
+                        <p>ไม่มีออเดอร์${currentFilter === 'all' ? '' : 'ในสถานะนี้'}</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = filteredOrders.map(order => `
+                <div class="order-card">
+                    <div class="order-card-header">
+                        <div>
+                            <div class="order-table">โต๊ะ ${order.tableId}</div>
+                            <div class="order-time">${formatDate(order.createdAt)}</div>
+                        </div>
+                        <span class="badge ${Order.getStatusColor(order.status)}">${Order.getStatusText(order.status)}</span>
+                    </div>
+                    <div class="order-card-body">
+                        ${order.items.map((item, idx) => `
+                            <div class="order-item">
+                                <div>
+                                    <strong>${item.name}</strong> x ${item.quantity}
+                                    ${item.note ? `<div style="font-size: 0.875rem; color: var(--text-gray);">📝 ${item.note}</div>` : ''}
+                                </div>
+                                <span>${formatCurrency(item.price * item.quantity)}</span>
+                            </div>
+                        `).join('')}
+                        ${order.note ? `<div style="margin-top: 12px; padding: 12px; background: var(--bg-light); border-radius: var(--radius-sm);"><strong>หมายเหตุ:</strong> ${order.note}</div>` : ''}
+                    </div>
+                    <div class="order-card-footer">
+                        ${order.status === 'pending' ? `
+                            <button class="status-btn status-btn-cooking" onclick="updateStatus('${order.id}', 'cooking')">เริ่มทำ</button>
+                            <button class="status-btn status-btn-ready" onclick="updateStatus('${order.id}', 'ready')">พร้อมเสิร์ฟ</button>
+                        ` : ''}
+                        ${order.status === 'cooking' ? `
+                            <button class="status-btn status-btn-ready" onclick="updateStatus('${order.id}', 'ready')">พร้อมเสิร์ฟ</button>
+                        ` : ''}
+                        ${order.status === 'ready' ? `
+                            <button class="status-btn status-btn-served" onclick="updateStatus('${order.id}', 'served')">เสิร์ฟแล้ว</button>
+                        ` : ''}
+                        <button class="status-btn" style="background: var(--text-light);" onclick="notifyCustomer('${order.tableId}', '${order.id}', '${order.status}')">แจ้งลูกค้า</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function filterOrders(status, btn) {
+            currentFilter = status;
+            document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            loadOrders();
+        }
+
+        function updateStatus(orderId, status) {
+            Order.updateStatus(orderId, status);
+            loadOrders();
+            showToast(`เปลี่ยนสถานะเป็น ${Order.getStatusText(status)}`, 'success');
+        }
+
+        function notifyCustomer(tableId, orderId, status) {
+            Chat.send(tableId, orderId, `ออเดอร์ #${orderId.slice(-6)} ${Order.getStatusText(status)} แล้วค่ะ`, 'staff');
+            showToast('แจ้งลูกค้าแล้ว', 'success');
+        }
+
+        function openChat() {
+            document.getElementById('chatModal').classList.add('active');
+            loadChatList();
+        }
+
+        function closeChat() {
+            document.getElementById('chatModal').classList.remove('active');
+        }
+
+        function loadChatList() {
+            const messages = Chat.getAll();
+            const container = document.getElementById('chatList');
+
+            const tableMessages = {};
+            messages.forEach(msg => {
+                if (!tableMessages[msg.tableId]) tableMessages[msg.tableId] = [];
+                tableMessages[msg.tableId].push(msg);
+            });
+
+            if (Object.keys(tableMessages).length === 0) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">💬</div><p>ไม่มีข้อความ</p></div>';
+                return;
+            }
+
+            container.innerHTML = Object.entries(tableMessages).map(([tableId, msgs]) => {
+                const lastMsg = msgs[msgs.length - 1];
+                const unread = msgs.filter(m => m.sender === 'customer' && !m.read).length;
+                return `
+                    <div class="card" style="margin-bottom: 12px;">
+                        <div class="card-header" style="justify-content: space-between;">
+                            <strong>โต๊ะ ${tableId}</strong>
+                            ${unread > 0 ? `<span class="badge badge-pending">${unread} ใหม่</span>` : ''}
+                        </div>
+                        <div class="card-body">
+                            <div style="font-size: 0.875rem; color: var(--text-gray);">${lastMsg.message}</div>
+                            <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 4px;">${formatDate(lastMsg.timestamp)}</div>
+                        </div>
+                        <div class="card-footer">
+                            <input type="text" class="form-input" id="reply-${tableId}" placeholder="ตอบกลับ..." style="flex: 1;">
+                            <button class="btn btn-primary" onclick="replyChat('${tableId}')">ส่ง</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            updateUnreadCount();
+        }
+
+        function replyChat(tableId) {
+            const input = document.getElementById(`reply-${tableId}`);
+            const message = input.value.trim();
+            if (!message) return;
+
+            Chat.send(tableId, null, message, 'staff');
+            input.value = '';
+            loadChatList();
+            showToast('ส่งข้อความแล้ว', 'success');
+        }
+
+        function updateUnreadCount() {
+            const messages = Chat.getAll();
+            const unread = messages.filter(m => m.sender === 'customer' && !m.read).length;
+            document.getElementById('unreadCount').textContent = unread;
+        }
+
+        setInterval(() => {
+            loadOrders();
+            updateUnreadCount();
+        }, 5000);
+
+        loadOrders();
+        updateUnreadCount();
+    </script>
+</body>
+</html>
